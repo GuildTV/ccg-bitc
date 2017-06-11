@@ -1,0 +1,17 @@
+{
+  "name": "ccg-bitc",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "casparcg-connection": "^0.17.1",
+    "express": "^4.15.2",
+    "osc": "^2.2.0",
+    "ws": "^1.1.1"
+  }
+}

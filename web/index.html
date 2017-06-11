@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>CCG-BITC</title>
+        <meta charset="UTF-8" />
+
+        <script>
+        var conn = new WebSocket('ws://localhost:8081');
+
+        conn.onmessage = function(e) {
+            var d = JSON.parse(e.data);
+            document.getElementById("lower").innerHTML = d.top + "<br />" + d.bottom;
+        };
+        </script>
+        <style type="text/css">
+			@font-face {
+				font-family: "Code New Roman";
+				src: url("font/Code New Roman-Bold.otf");
+			}
+            body { 
+                font-size: 70pt; 
+                color: white; 
+                -webkit-text-stroke: 2px black;
+                font-family: 'Code New Roman';
+                font-weight: bold;
+				overflow: hidden;
+				text-shadow: 0 0 20px #000;
+            }
+            #upper {
+                position: absolute;
+                top: 50px;
+                left: 250px;
+            }
+            #lower { 
+                position: absolute; 
+                top: 830px; 
+                left: 250px;
+            }
+        </style>
+
+    </head>
+
+    <body>
+        <div id="upper">*VT A*</div>
+        <div id="lower">Player<br />empty</div>
+    </body>
+</html>
