@@ -1,18 +1,27 @@
-var osc = require("osc"),
-    express = require("express"),
-    WebSocket = require("ws");
+const osc = require("osc");
+const WebSocket  = require('ws');
+const express = require('express');
+const os = require("os");
+const { CasparCG, ConnectionOptions, AMCP } = require("casparcg-connection");
 
-var TARGETLAYER = 10;
+const TARGETLAYER = 10;
+const BINDPORT = 8081;
 
-var getIPAddresses = function () {
-  var os = require("os"),
-    interfaces = os.networkInterfaces(),
-    ipAddresses = [];
+const connection = new CasparCG(new ConnectionOptions ({
+  autoReconnect: true,
+  autoReconnectInterval: 10000,
+
+  //debug: true,
+  // onConnected: loadInfo,
+}));
+
+function getIPAddresses() {
+  const interfaces = os.networkInterfaces();
+  const ipAddresses = [];
 
   for (var deviceName in interfaces) {
     var addresses = interfaces[deviceName];
-    for (var i = 0; i < addresses.length; i++) {
-      var addressInfo = addresses[i];
+    for (let addressInfo of addresses) {
       if (addressInfo.family === "IPv4" && !addressInfo.internal) {
         ipAddresses.push(addressInfo.address);
       }
@@ -20,7 +29,7 @@ var getIPAddresses = function () {
   }
 
   return ipAddresses;
-};
+}
 
 // Bind to a UDP socket to listen for incoming OSC events.
 var udpPort = new osc.UDPPort({
@@ -29,12 +38,15 @@ var udpPort = new osc.UDPPort({
 });
 
 udpPort.on("ready", function () {
-  var ipAddresses = getIPAddresses();
+  const ipAddresses = getIPAddresses();
   console.log("Listening for OSC over UDP.");
   ipAddresses.forEach(function (address) {
     console.log(" Host:", address + ", Port:", udpPort.options.localPort);
   });
-  console.log("To start the demo, go to http://127.0.0.1:8081 in your web browser.");
+  console.log("To start the demo, go to http://127.0.0.1:"+BINDPORT+" in your web browser.");
+
+  connection.playHtmlPage(1, 100, "http://127.0.0.1:"+BINDPORT+"/index.html");
+  // TODO - layer routing?
 });
 
 var active = {
@@ -45,7 +57,7 @@ var active = {
 };
 
 function pplt10(v) {
-  return (v < 10) ? ('0'+v) : v;
+  return (v < 10 && v >= 0) ? ('0'+v) : v;
 }
 
 function pptc(t) {
@@ -60,6 +72,9 @@ function pptc(t) {
 function parseBlock(block) {
   if (block.name === null)
     return { top: "Player", bottom: "empty" };
+
+  if (block.current == -1)
+    return null;
   
   var cs = Math.floor(block.current / block.fps);
   var cm = Math.floor(cs / 60);
@@ -83,7 +98,11 @@ function parseBlock(block) {
 var sockets = [];
 
 function sendTheThing() {
-  toSend = JSON.stringify(parseBlock(active));
+  toSend = parseBlock(active);
+  if (toSend == null)
+    return;
+
+  toSend = JSON.stringify(toSend);
 
   var socketsToRemove = [];
 
@@ -116,6 +135,7 @@ function clearState(){
 }
 
 udpPort.on("message", function(message) {
+  // console.log(message.address)
   if(message.address === "/channel/1/stage/layer/"+TARGETLAYER+"/paused") {
     active.paused = message.args[0]
     
@@ -126,10 +146,11 @@ udpPort.on("message", function(message) {
       resetTimeout = setTimeout(clearState, 1000);
     }
   }
-  else if(message.address === "/channel/1/stage/layer/"+TARGETLAYER+"/file/frame") {
+  else if(message.address === "/channel/1/stage/layer/"+TARGETLAYER+"/frame") {
     //console.log(message);
     //console.log("reporting " + message.args[0].low + " of " + message.args[1].low);
-    active.current = message.args[0].low - 2;
+    // console.log(message.args)
+    active.current = message.args[0].low ;//- 1; // TODO - why is this -2? is causing issues!
     active.total = message.args[1].low;
     //console.log(active.current + " " + active.total);
     sendTheThing();
@@ -155,7 +176,7 @@ udpPort.open();
 // Create an Express-based Web Socket server to which OSC messages will be relayed.
 var appResources = __dirname + "/web",
     app = express(),
-    server = app.listen(8081),
+    server = app.listen(BINDPORT),
     wss = new WebSocket.Server({
         server: server
     });
