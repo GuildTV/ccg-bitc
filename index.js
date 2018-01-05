@@ -45,16 +45,25 @@ udpPort.on("ready", function () {
   });
   console.log("To start the demo, go to http://127.0.0.1:"+BINDPORT+" in your web browser.");
 
-  connection.playHtmlPage(1, 100, "http://127.0.0.1:"+BINDPORT+"/index.html");
+  // connection.playHtmlPage(2, 100, "http://127.0.0.1:"+BINDPORT+"/index.html");
   // TODO - layer routing?
 });
 
-var active = {
-  current: 0,
-  total: 0,
-  name: null,
-  fps: 0
-};
+var activeChannels = {};
+
+function getActiveChannel(id){
+  var res = activeChannels[id];
+  if (res !== undefined)
+    return res;
+  
+  return activeChannels[id] = {
+    id: id,
+    current: 0,
+    total: 0,
+    name: null,
+    fps: 0
+  };
+}
 
 function pplt10(v) {
   return (v < 10 && v >= 0) ? ('0'+v) : v;
@@ -71,7 +80,7 @@ function pptc(t) {
 
 function parseBlock(block) {
   if (block.name === null)
-    return { top: "Player", bottom: "empty" };
+    return { id: block.id, top: "Player", bottom: "empty" };
 
   if (block.current == -1)
     return null;
@@ -92,37 +101,49 @@ function parseBlock(block) {
   rs = rs % 60;
   rm = rm % 60;
 
-  return { top: pptc({h: ch, m: cm, s: cs, f: cf}) + "&nbsp;&nbsp;" + pptc({m: rm, s:rs, f:rf}), bottom: block.name };
+  return { id: block.id, top: pptc({h: ch, m: cm, s: cs, f: cf}) + "&nbsp;&nbsp;" + pptc({m: rm, s:rs, f:rf}), bottom: block.name };
 }
 
 var sockets = [];
 
-function sendTheThing() {
-  toSend = parseBlock(active);
-  if (toSend == null)
-    return;
+function sendAllData() {
+  var keys = Object.keys(activeChannels);
+  for (var o=0; o<keys.length;o++){
+    var id = keys[o];
+    var active = getActiveChannel(id);
 
-  toSend = JSON.stringify(toSend);
+    var toSend = parseBlock(active);
+    if (toSend == null)
+      continue;
 
-  var socketsToRemove = [];
+    toSend = JSON.stringify(toSend);
 
-  for(var i = 0; i < sockets.length; i++) {
-    sockets[i].send(toSend, function ack(error) {
-      if(typeof error !== 'undefined') {
-        console.log("Socket error: " + error);
-        socketsToRemove.push(i);
-      }
-   });
-  }
+    if (active.lastSent == toSend)
+      continue;
 
-  for(s of socketsToRemove) {
-    sockets.splice(s, 1);
+    active.lastSent = toSend;
+
+    var socketsToRemove = [];
+
+    for(var i = 0; i < sockets.length; i++) {
+      sockets[i].send(toSend, function ack(error) {
+        if(typeof error !== 'undefined') {
+          console.log("Socket error: " + error);
+          socketsToRemove.push(i);
+        }
+     });
+    }
+
+    for(var s of socketsToRemove) {
+      sockets.splice(s, 1);
+    }
   }
 }
 
-var resetTimeout = null;
+var resetTimeouts = {};
 
-function clearState(){
+function clearState(id){
+  var active = getActiveChannel(id);
   if (active.paused)
     return;
   
@@ -131,43 +152,49 @@ function clearState(){
   active.fps = 0;
   active.name = null;
   
-  sendTheThing();
+  sendAllData();
+}
+
+function queueClearState(id){
+  if (resetTimeouts[id] != null && resetTimeouts[id] != undefined)
+    clearTimeout(resetTimeouts[id]);
+    
+  resetTimeouts[id] = setTimeout(function(){
+    clearState(id);
+  }, 1000);
 }
 
 udpPort.on("message", function(message) {
-  // console.log(message.address)
-  if(message.address === "/channel/1/stage/layer/"+TARGETLAYER+"/paused") {
+  if (message.address.indexOf("/channel/") != 0)
+    return;
+  
+  var addr2 = message.address.substring(9);
+  var id = parseInt(addr2.substring(0, addr2.indexOf("/")))
+  if (isNaN(id))
+    return;
+
+  var active = getActiveChannel(id);
+  
+  if(message.address === "/channel/"+id+"/stage/layer/"+TARGETLAYER+"/paused") {
     active.paused = message.args[0]
     
-    if (active.paused) {
-      if (resetTimeout != null)
-      clearTimeout(resetTimeout);
-    
-      resetTimeout = setTimeout(clearState, 1000);
-    }
+    if (active.paused)
+      queueClearState(id);
   }
-  else if(message.address === "/channel/1/stage/layer/"+TARGETLAYER+"/frame") {
-    //console.log(message);
-    //console.log("reporting " + message.args[0].low + " of " + message.args[1].low);
-    // console.log(message.args)
-    active.current = message.args[0].low ;//- 1; // TODO - why is this -2? is causing issues!
+  else if(message.address === "/channel/"+id+"/stage/layer/"+TARGETLAYER+"/file/frame") {
+    active.current = message.args[0].low;
     active.total = message.args[1].low;
-    //console.log(active.current + " " + active.total);
-    sendTheThing();
+    sendAllData();
   }
-  else if(message.address === "/channel/1/stage/layer/"+TARGETLAYER+"/file/fps") {
+  else if(message.address === "/channel/"+id+"/stage/layer/"+TARGETLAYER+"/file/fps") {
     active.fps = message.args[0];
-    sendTheThing();
+    sendAllData();
   }
-  else if(message.address === "/channel/1/stage/layer/"+TARGETLAYER+"/file/path") {
-    if (resetTimeout != null)
-      clearTimeout(resetTimeout);
-    
-    resetTimeout = setTimeout(clearState, 1000);
+  else if(message.address === "/channel/"+id+"/stage/layer/"+TARGETLAYER+"/file/path") {
+    queueClearState(id);
   
-    //console.log(message);
     active.name = message.args[0].slice(0,-4).substring(0, 35);
-    sendTheThing();
+    sendAllData();
   }
 });
 

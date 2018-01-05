@@ -4,14 +4,6 @@
         <title>CCG-BITC</title>
         <meta charset="UTF-8" />
 
-        <script>
-        var conn = new WebSocket('ws://' + location.host);
-
-        conn.onmessage = function(e) {
-            var d = JSON.parse(e.data);
-            document.getElementById("lower").innerHTML = d.top + "<br />" + d.bottom;
-        };
-        </script>
         <style type="text/css">
 			@font-face {
 				font-family: "Code New Roman";
@@ -41,7 +33,22 @@
     </head>
 
     <body>
-        <div id="upper">*VT A*</div>
-        <div id="lower">Player<br />empty</div>
+        <div id="upper">*VT -*</div>
+        <div id="lower">Player<br />disconnected</div>
+
+        <script>
+        var id = window.location.hash == "" ? 1 : parseInt(window.location.hash.substring(1));
+        if (!isNaN(id)){
+            var name = String.fromCharCode(65 + (id - 1));
+            document.getElementById("upper").innerHTML = "*VT "+name+"*";
+
+            var conn = new WebSocket('ws://' + location.host);
+            conn.onmessage = function(e) {
+                var d = JSON.parse(e.data);
+                if (d.id == id)
+                  document.getElementById("lower").innerHTML = d.top + "<br />" + d.bottom;
+            };
+        }
+        </script>
     </body>
 </html>
