@@ -1,18 +1,18 @@
 const osc = require("osc");
 const WebSocket  = require('ws');
+const path = require('path');
 const express = require('express');
 const os = require("os");
 const { CasparCG, ConnectionOptions, AMCP } = require("casparcg-connection");
 
-const TARGETLAYER = 10;
-const BINDPORT = 8081;
+const config = require('./config')
 
 const connection = new CasparCG(new ConnectionOptions ({
+  host: config.caspar.host,
+  port: config.caspar.port,
+
   autoReconnect: true,
   autoReconnectInterval: 10000,
-
-  //debug: true,
-  // onConnected: loadInfo,
 }));
 
 function getIPAddresses() {
@@ -32,21 +32,26 @@ function getIPAddresses() {
 }
 
 // Bind to a UDP socket to listen for incoming OSC events.
-var udpPort = new osc.UDPPort({
-    localAddress: "0.0.0.0",
-    localPort: 5253
+const oscClient = new osc.UDPPort({
+  localAddress: "0.0.0.0",
+  localPort: config.osc.port
 });
 
-udpPort.on("ready", function () {
+function launchOverlay(){
+  connection.clear(config.output.channel);
+  connection.playHtmlPage(config.output.channel, 100, "http://127.0.0.1:"+config.http.port+"/index.html");
+  connection.play(config.output.channel, 90, "route://"+config.source.channel+"-"+config.source.layer);
+}
+
+oscClient.on("open", function () {
   const ipAddresses = getIPAddresses();
   console.log("Listening for OSC over UDP.");
   ipAddresses.forEach(function (address) {
-    console.log(" Host:", address + ", Port:", udpPort.options.localPort);
+    console.log(" Host:", address + ", Port:", config.osc.port);
   });
-  console.log("To start the demo, go to http://127.0.0.1:"+BINDPORT+" in your web browser.");
+  console.log("Overlay is available at http://127.0.0.1:"+config.http.port+" in your web browser.");
 
-  connection.playHtmlPage(1, 100, "http://127.0.0.1:"+BINDPORT+"/index.html");
-  // TODO - layer routing?
+  launchOverlay();
 });
 
 var active = {
@@ -134,57 +139,54 @@ function clearState(){
   sendTheThing();
 }
 
-udpPort.on("message", function(message) {
-  // console.log(message.address)
-  if(message.address === "/channel/1/stage/layer/"+TARGETLAYER+"/paused") {
+oscClient.on("message", function(message) {
+  if(message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/paused") {
     active.paused = message.args[0]
     
     if (active.paused) {
       if (resetTimeout != null)
       clearTimeout(resetTimeout);
     
-      resetTimeout = setTimeout(clearState, 1000);
+      resetTimeout = setTimeout(clearState, 150);
     }
   }
-  else if(message.address === "/channel/1/stage/layer/"+TARGETLAYER+"/frame") {
-    //console.log(message);
-    //console.log("reporting " + message.args[0].low + " of " + message.args[1].low);
-    // console.log(message.args)
+  else if(message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/file/frame" || message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/frame") {
     active.current = message.args[0].low ;//- 1; // TODO - why is this -2? is causing issues!
     active.total = message.args[1].low;
-    //console.log(active.current + " " + active.total);
     sendTheThing();
   }
-  else if(message.address === "/channel/1/stage/layer/"+TARGETLAYER+"/file/fps") {
+  else if(message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/file/fps") {
     active.fps = message.args[0];
     sendTheThing();
   }
-  else if(message.address === "/channel/1/stage/layer/"+TARGETLAYER+"/file/path") {
+  else if(message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/file/path") {
     if (resetTimeout != null)
       clearTimeout(resetTimeout);
     
-    resetTimeout = setTimeout(clearState, 1000);
+    resetTimeout = setTimeout(clearState, 150);
   
-    //console.log(message);
     active.name = message.args[0].slice(0,-4).substring(0, 35);
     sendTheThing();
   }
 });
 
-udpPort.open();
+oscClient.open();
 
 // Create an Express-based Web Socket server to which OSC messages will be relayed.
-var appResources = __dirname + "/web",
-    app = express(),
-    server = app.listen(BINDPORT),
-    wss = new WebSocket.Server({
-        server: server
-    });
+const app = express();
+const server = app.listen(config.http.port);
+const wss = new WebSocket.Server({
+    server: server
+});
 
-app.use("/", express.static(appResources));
+app.use(express.static('web'));
 
 wss.on("connection", function (socket) {
-  console.log("A Web Socket connection has been established!");
+  console.log("A client as connected!");
   sockets.push(socket);
 });
 
+const stdin = process.openStdin()
+stdin.resume();
+stdin.on('data', launchOverlay);
+console.log("Press any key to reinitialise the overlay")

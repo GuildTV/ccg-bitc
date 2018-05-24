@@ -1,17 +1,28 @@
 {
-  "name": "ccg-bitc",
-  "version": "0.1.0",
+  "name": "casparcg-bitc",
+  "version": "0.2.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "nodemon index.js",
+    "build": "pkg -t node8-win-x64 --output caspar-bitc.exe index.js"
   },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
-    "casparcg-connection": "^0.17.1",
+    "casparcg-connection": "^4.1.0",
     "express": "^4.15.2",
-    "osc": "^2.2.0",
+    "nconf": "^0.10.0",
+    "node-osc": "^2.1.0",
+    "osc": "https://github.com/Julusian/osc.js",
     "ws": "^1.1.1"
+  },
+  "devDependencies": {
+    "nodemon": "^1.17.5"
+  },
+  "pkg": {
+    "assets": [
+      "web/**/*"
+    ]
   }
 }
