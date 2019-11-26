@@ -59,7 +59,7 @@ oscClient.on("open", function () {
   launchOverlay();
 });
 
-var active = {
+const currentState = {
   current: 0,
   total: 0,
   name: null,
@@ -84,7 +84,7 @@ function formatTimecode(t) {
   }
 }
 
-function parseBlock(block) {
+function processState(block) {
   if (block.name === null)
     return { top: "Player", bottom: "empty" };
 
@@ -107,39 +107,35 @@ function parseBlock(block) {
       bottom: block.name
     };
   } else {
-    var cs = Math.floor(block.current / block.fps);
-    var cm = Math.floor(cs / 60);
-    var ch = Math.floor(cm / 60) + 10;
+    const calcTimings = (time, useHours) => {
+      const cs = Math.floor(time / block.fps)
+      const cm = Math.floor(cs / 60)
+      const ch = useHours ? Math.floor(cm / 60) + 10 : undefined
+      const cf = (time % block.fps);
 
-    cs = cs % 60;
-    cm = cm % 60;
+      return formatTimecode({h: ch, m: cm % 60, s: cs % 60, f: cf})
+    }
 
-    var cf = (block.current % block.fps);
-
-    var rs = Math.floor((block.total - block.current) / block.fps);
-    var rm = Math.floor(rs / 60);
-    var rf = ((block.total - block.current) % block.fps);
-
-    rs = rs % 60;
-    rm = rm % 60;
-
-    return { top: formatTimecode({h: ch, m: cm, s: cs, f: cf}) + "&nbsp;&nbsp;" + formatTimecode({m: rm, s:rs, f:rf}), bottom: block.name };
+    return {
+      top: calcTimings(block.current, true) + "&nbsp;&nbsp;" + calcTimings(block.total - block.current),
+      bottom: block.name
+    };
   }
 }
 
 var sockets = [];
 
-function sendTheThing() {
-  toSend = parseBlock(active);
+function emitState() {
+  const toSend = processState(currentState);
   if (toSend == null)
     return;
 
-  toSend = JSON.stringify(toSend);
+  const toSendStr = JSON.stringify(toSend);
 
   var socketsToRemove = [];
 
   for(var i = 0; i < sockets.length; i++) {
-    sockets[i].send(toSend, function ack(error) {
+    sockets[i].send(toSendStr, function ack(error) {
       if(typeof error !== 'undefined') {
         console.log("Socket error: " + error);
         socketsToRemove.push(i);
@@ -155,23 +151,23 @@ function sendTheThing() {
 var resetTimeout = null;
 
 function clearState(){
-  if (active.paused)
+  if (currentState.paused)
     return;
   
-  active.total = 0;
-  active.current = 0;
-  active.fps = 0;
-  active.name = null;
+  currentState.total = 0;
+  currentState.current = 0;
+  currentState.fps = 0;
+  currentState.name = null;
   
-  sendTheThing();
+  emitState();
 }
 
 oscClient.on("message", function(message) {
   // console.log(message.address)
   if(message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/paused") {
-    active.paused = message.args[0]
+    currentState.paused = message.args[0]
     
-    if (active.paused) {
+    if (currentState.paused) {
       if (resetTimeout != null)
       clearTimeout(resetTimeout);
     
@@ -179,20 +175,20 @@ oscClient.on("message", function(message) {
     }
   }
   else if(message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/file/frame" || message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/frame") {
-    active.current = message.args[0].low ;//- 1; // TODO - why is this -2? is causing issues!
-    active.total = message.args[1].low;
-    sendTheThing();
+    currentState.current = message.args[0].low ;//- 1; // TODO - why is this -2? is causing issues!
+    currentState.total = message.args[1].low;
+    emitState();
   }
   else if(message.address === `/channel/${config.source.channel}/stage/layer/${config.source.layer}/foreground/file/time`) {
-    active.current = message.args[0];
-    active.total = message.args[1];
-    active.fps = 0;
+    currentState.current = message.args[0];
+    currentState.total = message.args[1];
+    currentState.fps = 0;
 
-    sendTheThing();
+    emitState();
   }
   else if(message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/file/fps") {
-    active.fps = message.args[0];
-    sendTheThing();
+    currentState.fps = message.args[0];
+    emitState();
   }
   else if(message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/file/path" || message.address === `/channel/${config.source.channel}/stage/layer/${config.source.layer}/foreground/file/name`) {
     if (resetTimeout != null)
@@ -200,8 +196,8 @@ oscClient.on("message", function(message) {
     
     resetTimeout = setTimeout(clearState, 150);
   
-    active.name = message.args[0].slice(0,-4).substring(0, 35);
-    sendTheThing();
+    currentState.name = message.args[0].slice(0,-4).substring(0, 35);
+    emitState();
   }
 });
 
@@ -224,4 +220,4 @@ wss.on("connection", function (socket) {
 const stdin = process.openStdin()
 stdin.resume();
 stdin.on('data', launchOverlay);
-console.log("Press any key to reinitialise the overlay")
+console.log("Press enter to reinitialise the overlay")
