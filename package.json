@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "nodemon index.js",
-    "build": "pkg -t node8-win-x64 --output caspar-bitc.exe index.js"
+    "build": "pkg -t node12-win-x64 --output caspar-bitc.exe index.js"
   },
   "author": "",
   "license": "MIT",
@@ -17,7 +17,8 @@
     "ws": "^1.1.1"
   },
   "devDependencies": {
-    "nodemon": "^2.0.1"
+    "nodemon": "^2.0.1",
+    "pkg": "^4.4.0"
   },
   "pkg": {
     "assets": [

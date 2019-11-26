@@ -37,9 +37,15 @@ const oscClient = new osc.UDPPort({
 });
 
 function launchOverlay(){
-  connection.clear(config.output.channel);
-  connection.playHtmlPage(config.output.channel, 100, "http://127.0.0.1:"+config.http.port+"/index.html");
-  connection.play(config.output.channel, 90, "route://"+config.source.channel+"-"+config.source.layer);
+  connection.clear(config.output.channel).catch(() => {
+    console.error("Failed to clear output channel")
+  });
+  connection.playHtmlPage(config.output.channel, 100, "http://127.0.0.1:"+config.http.port+"/index.html").catch(() => {
+    console.error("Failed to clear output overlay")
+  });
+  connection.play(config.output.channel, 90, "route://"+config.source.channel+"-"+config.source.layer).catch(() => {
+    console.error("Failed to play output route")
+  });
 }
 
 oscClient.on("open", function () {
