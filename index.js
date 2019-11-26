@@ -1,9 +1,8 @@
 const osc = require("osc");
 const WebSocket  = require('ws');
-const path = require('path');
 const express = require('express');
 const os = require("os");
-const { CasparCG, ConnectionOptions, AMCP } = require("casparcg-connection");
+const { CasparCG, ConnectionOptions } = require("casparcg-connection");
 
 const config = require('./config')
 
@@ -61,16 +60,21 @@ var active = {
   fps: 0
 };
 
-function pplt10(v) {
-  return (v < 10 && v >= 0) ? ('0'+v) : v;
+function padStr(v, ch, len) {
+  let str = `${v}`
+  while (str.length < len) {
+    str = `${ch}${str}`
+  }
+  return str
 }
 
-function pptc(t) {
+function formatTimecode(t) {
+  const str = `${padStr(t.m, '0', 2)}:${padStr(t.s, '0', 2)}.${padStr(t.f, '0', 3)}`
   if (typeof t.h !== 'undefined') {
-    return t.h + ":" + pplt10(t.m) + ":" + pplt10(t.s) + ":" + pplt10(t.f);
+    return `${t.h}:${str}`;
   }
   else {
-    return pplt10(t.m) + ":" + pplt10(t.s) + ":" + pplt10(t.f);
+    return str
   }
 }
 
@@ -80,24 +84,41 @@ function parseBlock(block) {
 
   if (block.current == -1)
     return null;
-  
-  var cs = Math.floor(block.current / block.fps);
-  var cm = Math.floor(cs / 60);
-  var ch = Math.floor(cm / 60) + 10;
 
-  cs = cs % 60;
-  cm = cm % 60;
+ 
+  if (block.fps === 0) {
+    const calcTimings = (time, useHours) => {
+      const seconds = Math.floor(time);
+      const milliseconds = Math.floor((time - seconds) * 1000);
+      const minutes = Math.floor(seconds / 60)
+      const hours = useHours ? Math.floor(minutes / 60) + 10 : undefined
 
-  var cf = (block.current % block.fps);
+      return formatTimecode({h: hours, m: minutes % 60, s: seconds % 60, f: milliseconds})
+    }
 
-  var rs = Math.floor((block.total - block.current) / block.fps);
-  var rm = Math.floor(rs / 60);
-  var rf = ((block.total - block.current) % block.fps);
+    return {
+      top: calcTimings(block.current, true) + "&nbsp;&nbsp;" + calcTimings(block.total - block.current),
+      bottom: block.name
+    };
+  } else {
+    var cs = Math.floor(block.current / block.fps);
+    var cm = Math.floor(cs / 60);
+    var ch = Math.floor(cm / 60) + 10;
 
-  rs = rs % 60;
-  rm = rm % 60;
+    cs = cs % 60;
+    cm = cm % 60;
 
-  return { top: pptc({h: ch, m: cm, s: cs, f: cf}) + "&nbsp;&nbsp;" + pptc({m: rm, s:rs, f:rf}), bottom: block.name };
+    var cf = (block.current % block.fps);
+
+    var rs = Math.floor((block.total - block.current) / block.fps);
+    var rm = Math.floor(rs / 60);
+    var rf = ((block.total - block.current) % block.fps);
+
+    rs = rs % 60;
+    rm = rm % 60;
+
+    return { top: formatTimecode({h: ch, m: cm, s: cs, f: cf}) + "&nbsp;&nbsp;" + formatTimecode({m: rm, s:rs, f:rf}), bottom: block.name };
+  }
 }
 
 var sockets = [];
@@ -140,6 +161,7 @@ function clearState(){
 }
 
 oscClient.on("message", function(message) {
+  // console.log(message.address)
   if(message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/paused") {
     active.paused = message.args[0]
     
@@ -155,11 +177,18 @@ oscClient.on("message", function(message) {
     active.total = message.args[1].low;
     sendTheThing();
   }
+  else if(message.address === `/channel/${config.source.channel}/stage/layer/${config.source.layer}/foreground/file/time`) {
+    active.current = message.args[0];
+    active.total = message.args[1];
+    active.fps = 0;
+
+    sendTheThing();
+  }
   else if(message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/file/fps") {
     active.fps = message.args[0];
     sendTheThing();
   }
-  else if(message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/file/path") {
+  else if(message.address === "/channel/"+config.source.channel+"/stage/layer/"+config.source.layer+"/file/path" || message.address === `/channel/${config.source.channel}/stage/layer/${config.source.layer}/foreground/file/name`) {
     if (resetTimeout != null)
       clearTimeout(resetTimeout);
     
