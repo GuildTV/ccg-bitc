@@ -210,7 +210,7 @@ const wss = new WebSocket.Server({
     server: server
 });
 
-app.use(express.static('web'));
+app.use(express.static(__dirname  + '/web'));
 
 wss.on("connection", function (socket) {
   console.log("A client as connected!");
