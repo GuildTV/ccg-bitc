@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "nodemon index.js",
-    "build": "pkg -t node12-win-x64 --output caspar-bitc.exe index.js"
+    "build": "pkg -t node12-win-x64 --output ../caspar-bitc.exe index.js"
   },
   "author": "",
   "license": "MIT",
@@ -13,12 +13,12 @@
     "casparcg-connection": "^4.1.0",
     "express": "^4.17.1",
     "nconf": "^0.10.0",
-    "osc": "^2.3.1",
+    "osc": "^2.4.0",
     "ws": "^1.1.1"
   },
   "devDependencies": {
     "nodemon": "^2.0.1",
-    "pkg": "^4.4.0"
+    "pkg": "^4.4.9"
   },
   "pkg": {
     "assets": [
